@@ -1,8 +1,10 @@
-use futures::try_ready;
+use futures::ready;
+use futures::{Stream, StreamExt};
+use std::{pin::Pin, task::Poll};
 use tokio::prelude::*;
-use tokio::timer::DelayQueue;
+use tokio::time::{DelayQueue, Instant};
 
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 #[derive(Debug, Clone)]
 struct Item {
@@ -34,24 +36,28 @@ struct MyQueue {
 
 impl Stream for MyQueue {
     type Item = Item;
-    type Error = ();
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        let mut r = try_ready!(self.q.poll().map_err(|_| ()))
+    fn poll_next(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        let mut r = ready!(Pin::new(&mut self.q).poll_next(cx))
+            .unwrap()
             .unwrap()
             .into_inner();
         r.modify();
 
         self.q.insert_at(r.clone(), Instant::now() + r.duration);
-        Ok(Async::Ready(Some(r.clone())))
+        Poll::Ready(Some(r))
     }
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let mut queue = DelayQueue::new();
     queue.insert_at(Item::new("1", Duration::from_secs(5)), Instant::now());
     queue.insert_at(Item::new("2", Duration::from_secs(25)), Instant::now());
     queue.insert_at(Item::new("3", Duration::from_secs(145)), Instant::now());
 
     let mq = MyQueue { q: queue };
-    tokio::run(mq.for_each(|x| Ok(println!("{:?}", x))));
+    mq.for_each(|x| async move { println!("{:?}", x) }).await;
 }
