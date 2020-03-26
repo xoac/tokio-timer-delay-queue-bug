@@ -1,5 +1,5 @@
 [package]
-name = "delay_queue_test"
+name = "tokio-timer-delay-queue-bug"
 version = "0.1.0"
 authors = ["Sylwester Rąpała <sylwesterrapala@outlook.com>"]
 edition = "2018"
